@@ -1,0 +1,37 @@
+# Example terraform.tfvars file for basic configuration
+# Copy this file to terraform.tfvars and modify the values
+
+# Basic configuration
+name_prefix       = "myapp"
+environment      = "dev"
+primary_endpoint  = "primary-api.example.com"
+backup_endpoint   = "backup-api.example.com"
+
+# Health check configuration
+health_check_type = "HTTP"
+health_check_port = 80
+health_check_path = "/health"
+failure_threshold = 3
+request_interval  = 30
+timeout           = 5
+
+# DNS configuration
+record_name = "api"
+record_type = "A"
+
+# Hosted zone configuration (use existing)
+create_hosted_zone = false
+hosted_zone_id     = "Z1234567890ABC"  # Replace with your hosted zone ID
+
+# Monitoring configuration
+enable_cloudwatch_alarms = true
+enable_sns_notifications = true
+notification_email       = "admin@example.com"
+
+# Tags
+tags = {
+  Project     = "MyApp"
+  Environment = "dev"
+  Owner       = "DevOps Team"
+  CostCenter  = "IT-001"
+} 

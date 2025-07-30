@@ -1,0 +1,55 @@
+# Example terraform.tfvars file for advanced configuration
+# Copy this file to terraform.tfvars and modify the values
+
+# Advanced configuration
+name_prefix       = "critical-app"
+environment      = "prod"
+primary_endpoint  = "primary-api.example.com"
+backup_endpoint   = "backup-api.example.com"
+
+# Advanced health check configuration
+health_check_type = "HTTPS"
+health_check_port = 443
+health_check_path = "/api/health"
+failure_threshold = 5
+request_interval  = 10
+timeout           = 8
+
+# DNS configuration
+record_name = "api"
+record_type = "A"
+
+# Hosted zone configuration (create new)
+create_hosted_zone = true
+domain_name        = "example.com"
+
+# Advanced monitoring configuration
+enable_cloudwatch_alarms = true
+alarm_evaluation_periods = 3
+alarm_period             = 30
+
+# Custom alarm actions (replace with your ARNs)
+alarm_actions = [
+  "arn:aws:sns:us-east-1:123456789012:ops-alerts",
+  "arn:aws:sns:us-east-1:123456789012:pager-duty"
+]
+
+ok_actions = [
+  "arn:aws:sns:us-east-1:123456789012:ops-resolved"
+]
+
+# SNS notifications
+enable_sns_notifications = true
+notification_email       = "ops@example.com"
+
+# Comprehensive tags
+tags = {
+  Project     = "Critical Application"
+  Environment = "prod"
+  Owner       = "SRE Team"
+  CostCenter  = "IT-001"
+  Compliance  = "SOX"
+  DataClass   = "Confidential"
+  Backup      = "Required"
+  Monitoring  = "Critical"
+} 
