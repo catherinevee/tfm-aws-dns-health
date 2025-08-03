@@ -1,6 +1,6 @@
 # AWS Route 53 Health Checks + Failover Terraform Module
 
-A comprehensive Terraform module for implementing Route 53 health checks with automatic failover capabilities. This module provides robust DNS-based disaster recovery and high availability solutions for AWS workloads.
+A comprehensive Terraform module for implementing Route 53 health checks with automatic failover capabilities. This module provides robust DNS-based disaster recovery and high availability solutions for AWS workloads with extensive customization options.
 
 ## 🏗️ Architecture
 
@@ -14,38 +14,87 @@ Primary Endpoint ← Route 53 Health Checks → Backup Endpoint
               SNS Notifications
 ```
 
+## 📋 Resource Map
+
+This module creates the following AWS resources:
+
+### Route 53 Resources
+| Resource | Type | Purpose | Conditional |
+|----------|------|---------|-------------|
+| `aws_route53_health_check.primary` | Route 53 Health Check | Primary endpoint health monitoring | `enable_health_checks = true` |
+| `aws_route53_health_check.backup` | Route 53 Health Check | Backup endpoint health monitoring | `enable_health_checks = true && backup_endpoint != null` |
+| `aws_route53_zone.main` | Route 53 Hosted Zone | DNS zone for domain management | `create_hosted_zone = true` |
+| `aws_route53_record.primary` | Route 53 Record | Primary DNS record with failover | `enable_health_checks = true` |
+| `aws_route53_record.backup` | Route 53 Record | Backup DNS record with failover | `enable_health_checks = true && backup_endpoint != null` |
+| `aws_route53_record.simple` | Route 53 Record | Simple DNS record without health checks | `enable_health_checks = false` |
+
+### CloudWatch Resources
+| Resource | Type | Purpose | Conditional |
+|----------|------|---------|-------------|
+| `aws_cloudwatch_metric_alarm.primary_health` | CloudWatch Alarm | Primary health check monitoring | `enable_cloudwatch_alarms = true && enable_health_checks = true` |
+| `aws_cloudwatch_metric_alarm.backup_health` | CloudWatch Alarm | Backup health check monitoring | `enable_cloudwatch_alarms = true && enable_health_checks = true && backup_endpoint != null` |
+
+### SNS Resources
+| Resource | Type | Purpose | Conditional |
+|----------|------|---------|-------------|
+| `aws_sns_topic.health_notifications` | SNS Topic | Health check notification topic | `enable_sns_notifications = true` |
+| `aws_sns_topic_policy.health_notifications` | SNS Topic Policy | Topic access policy | `enable_sns_notifications = true` |
+| `aws_sns_topic_subscription.email` | SNS Subscription | Email notification subscription | `enable_sns_notifications = true && notification_email != null` |
+
+### Resource Dependencies
+```
+Route 53 Health Checks
+    ↓
+Route 53 Records (with failover routing)
+    ↓
+CloudWatch Alarms (monitoring health check status)
+    ↓
+SNS Notifications (alerting on failures)
+```
+
 ## ✨ Features
 
-- **Health Check Monitoring**: HTTP/HTTPS/TCP health checks with customizable parameters
+- **Advanced Health Check Monitoring**: HTTP/HTTPS/TCP health checks with extensive customization
+  - Custom timeout, search strings, and latency measurement
+  - Multi-region health checks and SNI support
+  - Calculated health checks with child health check support
+  - Inverted health checks and insufficient data handling
+- **Flexible Routing Policies**: Support for failover, latency-based, geolocation, and weighted routing
 - **Automatic Failover**: Route 53 failover routing policy for disaster recovery
-- **CloudWatch Integration**: Automated alarms and monitoring
-- **SNS Notifications**: Email and topic-based alerting
-- **Flexible Configuration**: Support for existing or new hosted zones
+- **Enhanced CloudWatch Integration**: Comprehensive alarm configuration with custom thresholds and actions
+- **Advanced SNS Notifications**: FIFO topics, KMS encryption, and subscription filtering
+- **Flexible DNS Configuration**: Support for existing or new hosted zones with delegation sets
 - **Multi-Environment Support**: Dev, staging, and production configurations
 - **Comprehensive Tagging**: Resource tagging for cost management and compliance
+- **Extensive Customization**: Over 50+ configurable parameters for maximum flexibility
 
 ## 🚀 Use Cases
 
 - **Disaster Recovery**: Automatic failover between primary and backup regions
 - **Multi-Region Applications**: Geographic redundancy and load distribution
 - **High Availability**: Zero-downtime failover for critical services
-- **Monitoring & Alerting**: Proactive health monitoring with notifications
+- **Advanced Monitoring & Alerting**: Proactive health monitoring with custom notifications
 - **Compliance**: Audit trails and monitoring for regulatory requirements
+- **Global Load Balancing**: Latency-based and geolocation routing
+- **Microservices Health**: Complex health check scenarios with calculated checks
 
 ## 📋 Requirements
 
 | Name | Version |
 |------|---------|
-| terraform | >= 1.0 |
-| aws | >= 5.0 |
+| terraform | ~> 1.13.0 |
+| aws | ~> 6.2.0 |
+| terragrunt | ~> 0.84.0 |
 
 ## 🔧 Providers
 
 | Name | Version |
 |------|---------|
-| aws | >= 5.0 |
+| aws | ~> 6.2.0 |
 
 ## 📦 Inputs
+
+### Basic Configuration
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
@@ -53,28 +102,98 @@ Primary Endpoint ← Route 53 Health Checks → Backup Endpoint
 | environment | Environment name (dev, staging, prod, test) | `string` | `"dev"` | no |
 | primary_endpoint | Primary endpoint FQDN or IP address | `string` | n/a | yes |
 | backup_endpoint | Backup endpoint FQDN or IP address (optional) | `string` | `null` | no |
+| tags | Tags to apply to all resources | `map(string)` | `{}` | no |
+
+### Health Check Configuration
+
+| Name | Description | Type | Default | Required |
+|------|-------------|------|---------|:--------:|
 | enable_health_checks | Enable Route 53 health checks | `bool` | `true` | no |
-| health_check_type | Type of health check | `string` | `"HTTP"` | no |
+| health_check_type | Type of health check (HTTP, HTTPS, TCP, HTTP_STR_MATCH, HTTPS_STR_MATCH, CALCULATED, CLOUDWATCH_METRIC) | `string` | `"HTTP"` | no |
 | health_check_port | Port for health check | `number` | `80` | no |
 | health_check_path | Path for HTTP/HTTPS health checks | `string` | `"/"` | no |
+| health_check_timeout | Timeout for health check in seconds | `number` | `5` | no |
+| health_check_search_string | String to search for in response body | `string` | `null` | no |
+| invert_healthcheck | Invert the health check status | `bool` | `false` | no |
+| measure_latency | Measure latency for health checks | `bool` | `false` | no |
+| health_check_regions | List of regions to perform health checks from | `list(string)` | `["us-east-1"]` | no |
+| enable_sni | Enable Server Name Indication for HTTPS health checks | `bool` | `false` | no |
+| insufficient_data_health_status | Health status when insufficient data (Healthy, Unhealthy, LastKnownStatus) | `string` | `null` | no |
 | failure_threshold | Consecutive failures before marking unhealthy | `number` | `3` | no |
 | request_interval | Time between health check requests (seconds) | `number` | `30` | no |
-| timeout | Response timeout (seconds) | `number` | `5` | no |
+| child_healthchecks | List of child health check IDs for calculated health checks | `list(string)` | `[]` | no |
+| child_health_threshold | Number of child health checks that must be healthy | `number` | `1` | no |
+
+### DNS Configuration
+
+| Name | Description | Type | Default | Required |
+|------|-------------|------|---------|:--------:|
+| record_name | DNS record name | `string` | `"api"` | no |
+| record_type | DNS record type (A, AAAA, CNAME, TXT, MX, NS) | `string` | `"A"` | no |
+| ttl | Time to live for DNS records (seconds) | `number` | `300` | no |
+| evaluate_target_health | Evaluate target health for alias records | `bool` | `true` | no |
+| alias_zone_id | Zone ID for alias records (ALB, CloudFront, etc.) | `string` | `null` | no |
+
+### Routing Policies
+
+| Name | Description | Type | Default | Required |
+|------|-------------|------|---------|:--------:|
+| latency_routing_region | Region for latency-based routing | `string` | `null` | no |
+| geolocation_continent | Continent for geolocation-based routing | `string` | `null` | no |
+| geolocation_country | Country for geolocation-based routing | `string` | `null` | no |
+| geolocation_subdivision | Subdivision for geolocation-based routing | `string` | `null` | no |
+| weighted_routing_weight | Weight for weighted routing | `number` | `1` | no |
+| multivalue_answer_routing_policy | Enable multivalue answer routing policy | `bool` | `false` | no |
+
+### Hosted Zone Configuration
+
+| Name | Description | Type | Default | Required |
+|------|-------------|------|---------|:--------:|
 | create_hosted_zone | Create a new Route 53 hosted zone | `bool` | `false` | no |
 | domain_name | Domain name for hosted zone | `string` | `null` | no |
 | hosted_zone_id | Existing Route 53 hosted zone ID | `string` | `null` | no |
-| record_name | DNS record name | `string` | `"api"` | no |
-| record_type | DNS record type | `string` | `"A"` | no |
-| alias_zone_id | Zone ID for alias records | `string` | `null` | no |
-| ttl | Time to live for DNS records (seconds) | `number` | `300` | no |
-| enable_cloudwatch_alarms | Enable CloudWatch alarms | `bool` | `true` | no |
-| alarm_evaluation_periods | CloudWatch alarm evaluation periods | `number` | `2` | no |
-| alarm_period | CloudWatch alarm period (seconds) | `number` | `60` | no |
-| alarm_actions | CloudWatch alarm action ARNs | `list(string)` | `[]` | no |
-| ok_actions | CloudWatch OK action ARNs | `list(string)` | `[]` | no |
-| enable_sns_notifications | Enable SNS notifications | `bool` | `false` | no |
-| notification_email | Email for SNS notifications | `string` | `null` | no |
-| tags | Tags to apply to all resources | `map(string)` | `{}` | no |
+| hosted_zone_comment | Comment for the hosted zone | `string` | `"Managed by Terraform"` | no |
+| hosted_zone_force_destroy | Force destroy the hosted zone even if it contains records | `bool` | `false` | no |
+| hosted_zone_delegation_set_id | Delegation set ID for the hosted zone | `string` | `null` | no |
+
+### CloudWatch Alarms Configuration
+
+| Name | Description | Type | Default | Required |
+|------|-------------|------|---------|:--------:|
+| enable_cloudwatch_alarms | Enable CloudWatch alarms for health check failures | `bool` | `true` | no |
+| alarm_comparison_operator | Comparison operator for CloudWatch alarms | `string` | `"LessThanThreshold"` | no |
+| alarm_evaluation_periods | Number of evaluation periods for CloudWatch alarms | `number` | `2` | no |
+| alarm_metric_name | Metric name for CloudWatch alarms | `string` | `"HealthCheckStatus"` | no |
+| alarm_namespace | Namespace for CloudWatch alarms | `string` | `"AWS/Route53"` | no |
+| alarm_period | Period for CloudWatch alarms in seconds | `number` | `60` | no |
+| alarm_statistic | Statistic for CloudWatch alarms | `string` | `"Average"` | no |
+| alarm_threshold | Threshold for CloudWatch alarms | `number` | `1.0` | no |
+| alarm_description | Description for CloudWatch alarms | `string` | `"Health check failure alarm"` | no |
+| alarm_actions | List of ARNs for CloudWatch alarm actions | `list(string)` | `[]` | no |
+| ok_actions | List of ARNs for CloudWatch OK actions | `list(string)` | `[]` | no |
+| insufficient_data_actions | List of ARNs for CloudWatch insufficient data actions | `list(string)` | `[]` | no |
+| treat_missing_data | How to treat missing data in CloudWatch alarms | `string` | `"missing"` | no |
+| datapoints_to_alarm | Number of datapoints that must be breaching to trigger alarm | `number` | `null` | no |
+| extended_statistic | Extended statistic for CloudWatch alarms | `string` | `null` | no |
+| alarm_unit | Unit for CloudWatch alarms | `string` | `null` | no |
+
+### SNS Notifications Configuration
+
+| Name | Description | Type | Default | Required |
+|------|-------------|------|---------|:--------:|
+| enable_sns_notifications | Enable SNS notifications for health check events | `bool` | `false` | no |
+| notification_email | Email address for SNS notifications | `string` | `null` | no |
+| sns_topic_display_name | Display name for SNS topic | `string` | `null` | no |
+| sns_topic_kms_key_id | KMS key ID for SNS topic encryption | `string` | `null` | no |
+| sns_topic_fifo | Enable FIFO (First-In-First-Out) for SNS topic | `bool` | `false` | no |
+| sns_topic_content_based_deduplication | Enable content-based deduplication for FIFO SNS topic | `bool` | `false` | no |
+| sns_subscription_confirmation_timeout | Confirmation timeout in minutes for SNS subscription | `number` | `1` | no |
+| sns_subscription_delivery_policy | Delivery policy for SNS subscription | `string` | `null` | no |
+| sns_subscription_filter_policy | Filter policy for SNS subscription | `string` | `null` | no |
+| sns_subscription_filter_policy_scope | Filter policy scope for SNS subscription | `string` | `null` | no |
+| sns_subscription_raw_message_delivery | Enable raw message delivery for SNS subscription | `bool` | `false` | no |
+| sns_subscription_redrive_policy | Redrive policy for SNS subscription | `string` | `null` | no |
+| sns_subscription_role_arn | IAM role ARN for SNS subscription | `string` | `null` | no |
 
 ## 📤 Outputs
 
@@ -94,283 +213,149 @@ Primary Endpoint ← Route 53 Health Checks → Backup Endpoint
 | backup_cloudwatch_alarm_arn | ARN of the backup health check CloudWatch alarm |
 | sns_topic_arn | ARN of the SNS topic for health check notifications |
 | sns_topic_name | Name of the SNS topic for health check notifications |
-| health_check_status | Current status of health checks |
 | module_summary | Summary of the module configuration |
 
 ## 🛠️ Usage
 
-### Basic Example
+### Basic Usage
 
 ```hcl
 module "dns_health" {
   source = "./tfm-aws-dns-health"
 
-  name_prefix       = "myapp"
+  name_prefix       = "my-app"
   environment      = "prod"
-  primary_endpoint  = "primary-api.example.com"
-  backup_endpoint   = "backup-api.example.com"
+  primary_endpoint  = "primary.example.com"
+  backup_endpoint   = "backup.example.com"
   
+  # Health check configuration
   health_check_type = "HTTPS"
   health_check_port = 443
   health_check_path = "/health"
   
+  # DNS configuration
   record_name = "api"
+  record_type = "A"
   
+  # Use existing hosted zone
   create_hosted_zone = false
   hosted_zone_id     = "Z1234567890ABC"
   
+  # Enable monitoring
   enable_cloudwatch_alarms = true
   enable_sns_notifications = true
   notification_email       = "ops@example.com"
   
   tags = {
-    Project     = "MyApp"
+    Project     = "My Application"
     Environment = "prod"
     Owner       = "DevOps Team"
   }
 }
 ```
 
-### Advanced Example
+### Advanced Usage with Custom Health Checks
 
 ```hcl
 module "dns_health_advanced" {
   source = "./tfm-aws-dns-health"
 
-  name_prefix       = "critical-app"
+  name_prefix       = "advanced-app"
   environment      = "prod"
   primary_endpoint  = "primary.example.com"
   backup_endpoint   = "backup.example.com"
   
-  # Custom health check settings
+  # Advanced health check configuration
   health_check_type = "HTTPS"
   health_check_port = 443
   health_check_path = "/api/health"
-  failure_threshold = 5
-  request_interval  = 10
-  timeout           = 8
+  health_check_timeout = 8
+  health_check_search_string = "healthy"
+  measure_latency = true
+  health_check_regions = ["us-east-1", "us-west-2"]
+  enable_sni = true
+  
+  # Aggressive failure detection
+  failure_threshold = 2
+  request_interval = 10
   
   # DNS configuration
   record_name = "api"
   record_type = "A"
   
-  # Create new hosted zone
-  create_hosted_zone = true
-  domain_name        = "example.com"
-  
-  # Advanced monitoring
-  enable_cloudwatch_alarms = true
-  alarm_evaluation_periods = 3
-  alarm_period             = 30
-  
-  # Custom alarm actions
-  alarm_actions = [
-    "arn:aws:sns:us-east-1:123456789012:ops-alerts",
-    "arn:aws:sns:us-east-1:123456789012:pager-duty"
-  ]
-  
-  # SNS notifications
-  enable_sns_notifications = true
-  notification_email       = "ops@example.com"
-  
-  tags = {
-    Project     = "Critical Application"
-    Environment = "prod"
-    Owner       = "SRE Team"
-    CostCenter  = "IT-001"
-    Compliance  = "SOX"
-  }
-}
-```
-
-### Simple Example (No Health Checks)
-
-```hcl
-module "dns_simple" {
-  source = "./tfm-aws-dns-health"
-
-  name_prefix       = "simple-app"
-  environment      = "dev"
-  primary_endpoint  = "simple.example.com"
-  
-  # Disable health checks
-  enable_health_checks = false
-  
-  record_name = "simple"
-  
+  # Use existing hosted zone
   create_hosted_zone = false
   hosted_zone_id     = "Z1234567890ABC"
   
-  # Disable monitoring
-  enable_cloudwatch_alarms = false
-  enable_sns_notifications = false
+  # Enhanced monitoring
+  enable_cloudwatch_alarms = true
+  alarm_evaluation_periods = 3
+  alarm_period = 30
+  alarm_threshold = 0.5
+  
+  # SNS notifications with custom settings
+  enable_sns_notifications = true
+  notification_email = "ops@example.com"
+  sns_topic_display_name = "Health Check Alerts"
   
   tags = {
-    Project     = "Simple App"
-    Environment = "dev"
+    Project     = "Advanced Application"
+    Environment = "prod"
+    Owner       = "SRE Team"
   }
 }
 ```
 
-## 🔍 Health Check Types
+### TCP Health Check Example
 
-The module supports the following health check types:
+```hcl
+module "dns_health_tcp" {
+  source = "./tfm-aws-dns-health"
 
-- **HTTP**: Standard HTTP health checks
-- **HTTPS**: Secure HTTPS health checks
-- **TCP**: TCP connection health checks
-- **HTTP_STR_MATCH**: HTTP with string matching
-- **HTTPS_STR_MATCH**: HTTPS with string matching
-- **CALCULATED**: Calculated health checks
-- **CLOUDWATCH_METRIC**: CloudWatch metric-based health checks
-
-## 📊 Monitoring & Alerting
-
-### CloudWatch Alarms
-
-The module automatically creates CloudWatch alarms for health check failures:
-
-- **Primary Health Check Alarm**: Triggers when primary endpoint becomes unhealthy
-- **Backup Health Check Alarm**: Triggers when backup endpoint becomes unhealthy
-
-### SNS Notifications
-
-Optional SNS topic creation with email subscriptions for:
-
-- Health check failures
-- Health check recoveries
-- Custom alarm actions
-
-## 🔒 Security
-
-### IAM Permissions
-
-The following IAM permissions are required:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "route53:CreateHealthCheck",
-        "route53:DeleteHealthCheck",
-        "route53:GetHealthCheck",
-        "route53:UpdateHealthCheck",
-        "route53:CreateHostedZone",
-        "route53:DeleteHostedZone",
-        "route53:GetHostedZone",
-        "route53:CreateResourceRecordSet",
-        "route53:DeleteResourceRecordSet",
-        "route53:GetResourceRecordSet",
-        "cloudwatch:PutMetricAlarm",
-        "cloudwatch:DeleteAlarms",
-        "cloudwatch:DescribeAlarms",
-        "sns:CreateTopic",
-        "sns:DeleteTopic",
-        "sns:Subscribe",
-        "sns:Unsubscribe"
-      ],
-      "Resource": "*"
-    }
-  ]
+  name_prefix       = "tcp-app"
+  environment      = "staging"
+  primary_endpoint  = "tcp-primary.example.com"
+  backup_endpoint   = "tcp-backup.example.com"
+  
+  # TCP health check configuration
+  health_check_type = "TCP"
+  health_check_port = 22
+  health_check_timeout = 5
+  measure_latency = true
+  
+  # DNS configuration
+  record_name = "ssh"
+  record_type = "A"
+  
+  # Use existing hosted zone
+  create_hosted_zone = false
+  hosted_zone_id     = "Z1234567890ABC"
+  
+  # Basic monitoring
+  enable_cloudwatch_alarms = true
+  enable_sns_notifications = true
+  notification_email = "admin@example.com"
+  
+  tags = {
+    Project     = "TCP Health Check"
+    Environment = "staging"
+    Owner       = "Infrastructure Team"
+  }
 }
 ```
 
-### Encryption
+For more examples, see the `examples/` directory:
+- `examples/basic/` - Basic usage examples with comprehensive comments
+- `examples/advanced/` - Advanced configurations and use cases
 
-- All health check communications use HTTPS when configured
-- SNS topics support encryption at rest
-- CloudWatch logs are encrypted by default
+## 📚 Examples
 
-## 🧪 Testing
+See the [examples](./examples/) directory for complete working examples:
 
-### Manual Testing
-
-1. **Health Check Validation**:
-   ```bash
-   # Test primary endpoint
-   curl -I https://primary-api.example.com/health
-   
-   # Test backup endpoint
-   curl -I https://backup-api.example.com/health
-   ```
-
-2. **DNS Resolution**:
-   ```bash
-   # Check DNS resolution
-   nslookup api.example.com
-   dig api.example.com
-   ```
-
-3. **Failover Testing**:
-   ```bash
-   # Simulate primary failure
-   # Verify automatic failover to backup
-   ```
-
-### Automated Testing
-
-The module includes example configurations for testing:
-
-```bash
-# Navigate to examples
-cd examples/basic
-
-# Initialize and plan
-terraform init
-terraform plan
-
-# Apply (use with caution)
-terraform apply
-```
-
-## 📈 Performance Considerations
-
-- **Health Check Intervals**: Use 30-second intervals for production (10-second for critical systems)
-- **Failure Thresholds**: Balance between responsiveness and stability
-- **DNS TTL**: Consider lower TTL values for faster failover
-- **Monitoring**: Use CloudWatch alarms for proactive monitoring
-
-## 💰 Cost Optimization
-
-- **Health Check Pricing**: Route 53 health checks are charged per check per month
-- **CloudWatch Alarms**: Standard CloudWatch pricing applies
-- **SNS Notifications**: Pay per message delivered
-- **Hosted Zones**: Monthly charge per hosted zone
-
-## 🚨 Troubleshooting
-
-### Common Issues
-
-1. **Health Check Failures**:
-   - Verify endpoint accessibility
-   - Check firewall rules
-   - Validate health check path
-
-2. **DNS Resolution Issues**:
-   - Confirm hosted zone configuration
-   - Verify name server delegation
-   - Check record propagation
-
-3. **CloudWatch Alarm Issues**:
-   - Validate alarm configuration
-   - Check SNS topic permissions
-   - Verify email subscription
-
-### Debug Commands
-
-```bash
-# Check health check status
-aws route53 get-health-check --health-check-id <health-check-id>
-
-# Verify DNS records
-aws route53 list-resource-record-sets --hosted-zone-id <zone-id>
-
-# Check CloudWatch alarms
-aws cloudwatch describe-alarms --alarm-names <alarm-name>
-```
+- **Basic Example**: Simple health check with failover
+- **Advanced Example**: Complex configurations with custom health checks
+- **TCP Health Check**: TCP-based health monitoring
+- **Multi-Region**: Health checks from multiple AWS regions
 
 ## 🤝 Contributing
 
@@ -382,25 +367,15 @@ aws cloudwatch describe-alarms --alarm-names <alarm-name>
 
 ## 📄 License
 
-This module is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 📞 Support
+## 🆘 Support
 
 For support and questions:
+- Create an issue in the GitHub repository
+- Check the examples directory for usage patterns
+- Review the module outputs for available data
 
-- Create an issue in the repository
-- Review the examples directory
-- Check the troubleshooting section
-- Consult AWS Route 53 documentation
+## 🔄 Versioning
 
-## 🔄 Version History
-
-- **v1.0.0**: Initial release with basic health check functionality
-- **v1.1.0**: Added CloudWatch alarms and SNS notifications
-- **v1.2.0**: Enhanced validation and error handling
-- **v1.3.0**: Added support for multiple health check types
-- **v1.4.0**: Improved documentation and examples
-
----
-
-**Note**: This module is designed for production use but should be thoroughly tested in your environment before deployment.
+This module follows [Semantic Versioning](https://semver.org/). For the versions available, see the tags on this repository.

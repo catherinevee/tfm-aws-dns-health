@@ -1,7 +1,7 @@
 # Route 53 Health Checks + Failover Module Outputs
 
 output "primary_health_check_id" {
-  description = "ID of the primary health check"
+  description = "ID of the primary health check. Returns null if health checks are disabled."
   value       = var.enable_health_checks ? aws_route53_health_check.primary[0].id : null
 }
 
@@ -61,8 +61,9 @@ output "backup_cloudwatch_alarm_arn" {
 }
 
 output "sns_topic_arn" {
-  description = "ARN of the SNS topic for health check notifications"
+  description = "ARN of the SNS topic for health check notifications. Returns null if SNS notifications are disabled."
   value       = var.enable_sns_notifications ? aws_sns_topic.health_notifications[0].arn : null
+  sensitive   = false
 }
 
 output "sns_topic_name" {

@@ -59,6 +59,8 @@ lint:
 # Testing
 test: validate fmt lint
 	@echo "Running tests..."
+	@echo "Running Terraform tests..."
+	@terraform test
 	@echo "All validation checks passed!"
 
 # Cleanup
@@ -98,6 +100,12 @@ security-scan:
 		terrascan scan -i terraform; \
 	else \
 		echo "terrascan not found. Install with: go install github.com/tenable/terrascan/cmd/terrascan@latest"; \
+	fi
+	@if command -v tfsec >/dev/null 2>&1; then \
+		tfsec .; \
+	else \
+		echo "tfsec not found. Install with: go install github.com/aquasecurity/tfsec/cmd/tfsec@latest"; \
+	fi
 	fi
 
 # CI/CD helpers
